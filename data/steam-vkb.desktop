@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=Steam Game Mode Keyboard
+Name[de]=Steam-Spieltastatur
+Comment=Use the Steam Game Mode on-screen keyboard in desktop mode
+Comment[de]=Die Spieltastatur von Steam im Desktop-Modus benutzen
+Exec=steam-vkb
+Icon=input-keyboard-virtual
+NoDisplay=true
+Terminal=false
+Categories=System;Utility;
+X-KDE-Wayland-VirtualKeyboard=true
+# Listed by System Settings -> Keyboard -> Virtual Keyboard alongside
+# "Plasma Keyboard" and "Maliit".  Selecting it makes KWin launch steam-vkb
+# with a private input-method connection.
