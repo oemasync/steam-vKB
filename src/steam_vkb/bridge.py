@@ -35,6 +35,19 @@ from pywayland.protocol import input_method_unstable_v1 as im_v1
 from . import PROTOCOL_GLOBAL
 from .config import Config
 
+# Python 3.14 / cffi compatibility: wl_display_dispatch may raise
+# "TypeError: an integer is required".  Fall back to ctypes.
+try:
+    import ctypes as _ctypes
+    _wl = _ctypes.CDLL("libwayland-client.so.0")
+    _wl.wl_display_dispatch.argtypes = [_ctypes.c_void_p]
+    _wl.wl_display_dispatch.restype = _ctypes.c_int
+    _wl.wl_display_dispatch_pending.argtypes = [_ctypes.c_void_p]
+    _wl.wl_display_dispatch_pending.restype = _ctypes.c_int
+    _CTYPES_OK = True
+except Exception:  # noqa: BLE001
+    _CTYPES_OK = False
+
 # XKB keysyms for the special keys.
 KEYSYM = {
     "ESC": 0xFF1B,
@@ -252,10 +265,15 @@ class SteamVkbBridge:
                 try:
                     rc = display.dispatch(block=True)
                 except TypeError as exc:
-                    # Python 3.14 / cffi compat: dispatch may raise TypeError
-                    # but the global callback already ran.  Treat as progress.
-                    self._log(f"dispatch TypeError (non-fatal): {exc!r}")
-                    rc = 1
+                    self._log(f"dispatch TypeError, trying ctypes fallback: {exc!r}")
+                    if _CTYPES_OK:
+                        try:
+                            rc = _wl.wl_display_dispatch(int(__import__("pywayland").ffi.cast("uintptr_t", display._ptr)))
+                        except Exception as exc2:  # noqa: BLE001
+                            self._log(f"ctypes dispatch failed: {exc2!r}")
+                            rc = 1
+                    else:
+                        rc = 1
                 if rc is not None and rc <= 0:
                     self._log("connection closed while waiting for IM global")
                     break
@@ -293,9 +311,15 @@ class SteamVkbBridge:
                 try:
                     rc = display.dispatch(block=False)
                 except TypeError as exc2:
-                    # Python 3.14 / cffi compat: non-fatal, keep running.
-                    self._log(f"dispatch TypeError (non-fatal): {exc2!r}")
-                    rc = 1
+                    self._log(f"dispatch TypeError, trying ctypes fallback: {exc2!r}")
+                    if _CTYPES_OK:
+                        try:
+                            rc = _wl.wl_display_dispatch_pending(int(__import__("pywayland").ffi.cast("uintptr_t", display._ptr)))
+                        except Exception as exc3:  # noqa: BLE001
+                            self._log(f"ctypes dispatch_pending failed: {exc3!r}")
+                            rc = 1
+                    else:
+                        rc = 1
                 except Exception as exc2:  # noqa: BLE001
                     self._log(f"dispatch raised: {exc2!r}")
                     Gtk.main_quit()
