@@ -63,6 +63,25 @@ fi
 install -D -m 644 "$kwinrules_src" "$kwinrules_dst"
 echo "==> installed kwinrules -> $kwinrules_dst"
 
+# Make sure KWin actually uses our keyboard and pops it up on any focus
+# (touch or mouse), including password fields.
+kwrite=""
+for kc in kwriteconfig6 kwriteconfig5; do
+    if command -v "$kc" >/dev/null 2>&1; then kwrite="$kc"; break; fi
+done
+if [ "$user_mode" = 1 ]; then
+    kwinrc_dst="${XDG_CONFIG_HOME:-$HOME/.config}/kwinrc"
+    desktop_path="$apps_dir/steam-vkb.desktop"
+else
+    kwinrc_dst="/etc/xdg/kwinrc"
+    desktop_path="$apps_dir/steam-vkb.desktop"
+fi
+if [ -n "$kwrite" ]; then
+    "$kwrite" --file "$kwinrc_dst" --group Wayland --key InputMethod "$desktop_path" >/dev/null 2>&1 || true
+    "$kwrite" --file "$kwinrc_dst" --group Wayland --key VirtualKeyboardEnabled true >/dev/null 2>&1 || true
+    "$kwrite" --file "$kwinrc_dst" --group Wayland --key VirtualKeyboardMode 2 >/dev/null 2>&1 || true
+fi
+
 # Rebuild the desktop entry cache so the Virtual Keyboard KCM sees the new
 # option immediately (kbuildsycoca6 falls back to kbuildsycoca5 automatically).
 for sy in kbuildsycoca6 kbuildsycoca5; do

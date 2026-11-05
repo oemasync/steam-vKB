@@ -14,6 +14,12 @@ import sys
 import time
 import traceback
 
+# Force XWayland so the keyboard is an X11 window: KWin's kwinrulesrc (keep-above,
+# skip-taskbar) keys on the X11 WM_CLASS and applies to XWayland windows, matching
+# the original Bazzite Steam keyboard. The Wayland input-method connection is
+# handled separately via pywayland and is unaffected by this.
+os.environ.setdefault("GDK_BACKEND", "x11")
+
 try:
     import gi
     gi.require_version("Gtk", "3.0")
@@ -82,8 +88,12 @@ class _SummonState:
 if HAS_GTK:
     class KeyboardWindow(Gtk.Window):
         def __init__(self, on_key):
-            super().__init__(title="steam-vKB")
+            super().__init__(title="Steam Input On-screen Keyboard")
             self._on_key = on_key
+            try:
+                self.set_wmclass("steamwebhelper", "steam")
+            except Exception:  # noqa: BLE001
+                pass
             self.set_decorated(False)
             self.set_skip_taskbar_hint(True)
             self.set_skip_pager_hint(True)
