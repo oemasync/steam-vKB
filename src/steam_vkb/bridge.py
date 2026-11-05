@@ -119,7 +119,7 @@ if HAS_GTK:
             self.set_skip_taskbar_hint(True)
             self.set_skip_pager_hint(True)
             self.set_keep_above(True)
-            self.set_type_hint(Gdk.WindowTypeHint.UTILITY)
+            self.set_type_hint(Gdk.WindowTypeHint.MENU)
             self.set_resizable(False)
 
             outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
