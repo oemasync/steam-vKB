@@ -138,6 +138,7 @@ def test_env_sanitization(clean_wayland_env, tmp_path):
     inner_env = dict(os.environ)
     inner_env["WAYLAND_SOCKET"] = "77"  # what KWin sets for the IM process
     inner_env["QT_QPA_PLATFORM"] = "wayland"
+    inner_env["STEAM_VKB_SKIP_LOGIN_CHECK"] = "1"  # test host has no Steam login
 
     assert summon([sys.executable, "-c", child_script], env=inner_env) is True
     deadline = time.time() + 5

@@ -9,25 +9,48 @@ plumbing is needed from the compositor side.
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
+import sys
 
 from .config import sanitize_env
 
-STEAM_OPEN_URL = "steam://open/keyboard"
+
+def _steam_logged_in(env=None) -> bool:
+    """Best-effort check: Steam has a persisted loginusers.vdf with an account."""
+    check_env = env if env is not None else os.environ
+    if str(check_env.get("STEAM_VKB_SKIP_LOGIN_CHECK", "")).lower() in ("1", "true", "yes"):
+        return True
+    steam_root = os.path.expanduser("~/.local/share/Steam")
+    loginusers = os.path.join(steam_root, "config", "loginusers.vdf")
+    if not os.path.isfile(loginusers):
+        return False
+    try:
+        with open(loginusers) as fh:
+            return "AccountName" in fh.read()
+    except OSError:
+        return False
 
 
 def _default_open_cmd() -> list[str] | None:
     """Auto-detect how to invoke the Steam URL handler on this system."""
     if shutil.which("steam"):
-        return ["steam", STEAM_OPEN_URL]
+        return ["steam", "steam://open/keyboard"]
     if shutil.which("xdg-open"):
-        return ["xdg-open", STEAM_OPEN_URL]
+        return ["xdg-open", "steam://open/keyboard"]
     return None
 
 
-def summon(cfg_open_cmd: list[str] | None, env: dict[str, str] | None = None) -> bool:
+def summon(cfg_open_cmd, env=None) -> bool:
     """Summon the Steam keyboard overlay. Returns True if a process started."""
+    if not _steam_logged_in(env):
+        print(
+            "steam-vkb: Steam is not logged in on this account; "
+            "log into Steam once (Remember me) and the keyboard will appear.",
+            file=sys.stderr,
+        )
+        return False
     cmd = cfg_open_cmd if cfg_open_cmd else _default_open_cmd()
     if not cmd:
         return False
