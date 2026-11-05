@@ -57,7 +57,7 @@ for i in range(1, 10):
 # Keyboard layout: rows of keys.  Each key is (label, value) where value is
 # either a single character to commit, or a special token like "BACKSPACE".
 LAYOUT = [
-    ["ESC", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9"],
+    ["ESC", "CTRL", "ALT", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9"],
     ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "BACKSPACE"],
     ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p"],
     ["a", "s", "d", "f", "g", "h", "j", "k", "l", "ENTER"],
@@ -249,7 +249,14 @@ class SteamVkbBridge:
         deadline = time.monotonic() + 5.0
         try:
             while not getattr(self, "_bound", False) and time.monotonic() < deadline:
-                if display.dispatch(block=True) <= 0:
+                try:
+                    rc = display.dispatch(block=True)
+                except TypeError as exc:
+                    # Python 3.14 / cffi compat: dispatch may raise TypeError
+                    # but the global callback already ran.  Treat as progress.
+                    self._log(f"dispatch TypeError (non-fatal): {exc!r}")
+                    rc = 1
+                if rc is not None and rc <= 0:
                     self._log("connection closed while waiting for IM global")
                     break
             if getattr(self, "_bound", False):
@@ -285,6 +292,10 @@ class SteamVkbBridge:
             def tick():
                 try:
                     rc = display.dispatch(block=False)
+                except TypeError as exc2:
+                    # Python 3.14 / cffi compat: non-fatal, keep running.
+                    self._log(f"dispatch TypeError (non-fatal): {exc2!r}")
+                    rc = 1
                 except Exception as exc2:  # noqa: BLE001
                     self._log(f"dispatch raised: {exc2!r}")
                     Gtk.main_quit()

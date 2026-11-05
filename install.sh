@@ -32,7 +32,7 @@ mkdir -p "$prefix/libexec" "$prefix/venv"
 cp -rv "$HERE/src/steam_vkb" "$prefix/libexec/"
 
 if ! $prefix/venv/bin/python -c "import pywayland" >/dev/null 2>&1; then
-    python3 -m venv "$prefix/venv"
+    python3 -m venv "$prefix/venv" --system-site-packages
     echo "==> installing pywayland $PYWAYLAND_PIN into the steam-vkb venv"
     "$prefix/venv/bin/pip" --quiet install "pywayland==$PYWAYLAND_PIN"
 fi
