@@ -54,7 +54,7 @@ events_lock = threading.Lock()
 summons: list[str] = []
 
 
-def summon(config) -> bool:
+def summon(open_cmd) -> bool:
     with events_lock:
         summons.append("summon")
     return True
@@ -85,6 +85,14 @@ steps = [
 
 server_thread = threading.Thread(target=server.start, args=(steps, SOCKET_NAME), daemon=True)
 server_thread.start()
+
+# Wait until the fake server has actually created its socket: the bridge
+# client would fail its only connect attempt otherwise (a harness race,
+# impossible in production where KWin spawns after the socket exists).
+socket_path = os.path.join(RUNTIME_DIR, SOCKET_NAME)
+deadline = time.time() + 5.0
+while time.time() < deadline and not os.path.exists(socket_path):
+    time.sleep(0.01)
 
 bridge_result: dict[str, object] = {}
 
