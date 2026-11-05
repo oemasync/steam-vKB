@@ -354,6 +354,16 @@ class SteamVkbBridge:
                     display.flush()
                 except Exception:  # noqa: BLE001
                     pass
+                # Periodic window visibility check: if state says open but
+                # window is hidden, re-show it (recovers from KWin hiding it).
+                if self._state.open and self._window is not None:
+                    try:
+                        if hasattr(self._window, "get_visible") and not self._window.get_visible():  # type: ignore[union-attr]
+                            self._log("periodic: window hidden but state open; re-showing")
+                            self._window.show_all()  # type: ignore[union-attr]
+                            self._window.present()  # type: ignore[union-attr]
+                    except Exception:  # noqa: BLE001
+                        pass
                 return True
 
             GLib.timeout_add(16, tick)
