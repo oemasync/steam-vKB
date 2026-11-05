@@ -92,6 +92,11 @@ for sy in kbuildsycoca6 kbuildsycoca5; do
     fi
 done
 
+# Ask KWin to pick up the new mode / rules without a full restart.
+if command -v qdbus >/dev/null 2>&1; then
+    qdbus org.kde.KWin /KWin reconfigure >/dev/null 2>&1 || true
+fi
+
 echo "==> done. Next step:"
 echo "    System Settings -> Keyboard -> Virtual Keyboard -> 'Steam Game Mode Keyboard'"
 echo "    (takes effect after KWin restarts the virtual keyboard, i.e. Apply + focus)"
