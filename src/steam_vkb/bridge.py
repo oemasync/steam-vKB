@@ -223,6 +223,7 @@ class SteamVkbBridge:
                     self._log(f"summoner raised: {exc!r}")
             if self._window is not None:
                 try:
+                    self._window.show()  # type: ignore[union-attr]
                     self._window.show_all()
                     self._window.present()
                     # Extra raise for XWayland/KWin
@@ -368,6 +369,7 @@ class SteamVkbBridge:
                     try:
                         if hasattr(self._window, "get_visible") and not self._window.get_visible():  # type: ignore[union-attr]
                             self._log("periodic: window hidden but state open; re-showing")
+                            self._window.show()  # type: ignore[union-attr]
                             self._window.show_all()  # type: ignore[union-attr]
                             self._window.present()  # type: ignore[union-attr]
                     except Exception:  # noqa: BLE001
