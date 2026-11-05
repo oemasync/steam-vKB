@@ -136,7 +136,16 @@ class SteamVkbBridge:
         if not _os.path.isfile(script):
             self._log(f"topbar script missing: {script}")
             return
-        py = shutil.which("python3") or shutil.which("python")
+        # Prefer the system interpreter: the bridge runs inside the steam-vkb
+        # venv (which has pywayland but not PyGObject/gi), while the top bar
+        # needs the system python that ships PyGObject.
+        py = None
+        for cand in ("/usr/bin/python3", "/usr/bin/python"):
+            if _os.path.isfile(cand) and _os.access(cand, _os.X_OK):
+                py = cand
+                break
+        if py is None:
+            py = shutil.which("python3") or shutil.which("python")
         if not py:
             self._log("no python for topbar")
             return
