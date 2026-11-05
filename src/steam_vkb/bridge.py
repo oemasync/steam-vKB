@@ -26,6 +26,9 @@ import signal
 import sys
 import time
 import traceback
+import subprocess
+import shutil
+import os as _os
 
 from pywayland.client import Display
 from pywayland.protocol import input_method_unstable_v1 as im_v1
@@ -70,6 +73,7 @@ class SteamVkbBridge:
         self._summoner = summoner if summoner is not None else summon
         self._state = _SummonState()
         self._bound = False
+        self._topbar_proc = None
 
     # -- logging ------------------------------------------------------------
     def _log(self, msg: str) -> None:
@@ -93,6 +97,7 @@ class SteamVkbBridge:
                 self._log("summon command unavailable/failed")
             else:
                 self._log("summon dispatched")
+                self._launch_topbar()
         else:
             self._log("activate ignored (debounce or already open)")
 
@@ -100,6 +105,7 @@ class SteamVkbBridge:
         if self._state.open:
             self._state.close()
             self._log("deactivate: closed")
+            self._kill_topbar()
             if self._config.close_on_deactivate and self._config.close_cmd:
                 self._log("trying dismiss command")
                 try:
@@ -119,6 +125,49 @@ class SteamVkbBridge:
         self._bound = True
         self._log(f"{iface} bound, activate/deactivate wired")
         return keyboard
+
+
+    # -- top bar companion --------------------------------------------------
+    def _topbar_script(self) -> str:
+        return _os.path.join(_os.path.dirname(__file__), "topbar.py")
+
+    def _launch_topbar(self) -> None:
+        script = self._topbar_script()
+        if not _os.path.isfile(script):
+            self._log(f"topbar script missing: {script}")
+            return
+        py = shutil.which("python3") or shutil.which("python")
+        if not py:
+            self._log("no python for topbar")
+            return
+        try:
+            self._topbar_proc = subprocess.Popen(  # noqa: S603
+                [py, script],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+                env={k: v for k, v in _os.environ.items()
+                     if k not in ("WAYLAND_SOCKET", "QT_QPA_PLATFORM")},
+            )
+            self._log(f"topbar launched pid={self._topbar_proc.pid}")
+        except OSError as exc:
+            self._log(f"topbar launch failed: {exc!r}")
+
+    def _kill_topbar(self) -> None:
+        proc = self._topbar_proc
+        self._topbar_proc = None
+        if proc is None:
+            return
+        try:
+            proc.terminate()
+            proc.wait(timeout=2)
+        except Exception:  # noqa: BLE001
+            try:
+                proc.kill()
+            except Exception:  # noqa: BLE001
+                pass
+        self._log("topbar stopped")
 
     def run(self) -> int:
         """Connect to KWin, bind the input method, and dispatch forever."""

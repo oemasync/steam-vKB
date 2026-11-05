@@ -49,6 +49,20 @@ fi
 sed "s|^Exec=steam-vkb|Exec=$bin_dir/steam-vkb|" "$HERE/data/steam-vkb.desktop" \
     > "$apps_dir/steam-vkb.desktop"
 
+# Install the KWin window rule that keeps the Steam keyboard (and our top bar)
+# above other windows, matching Bazzite's steamdeck-kde-presets patch.
+kwinrules_src="$HERE/data/kwinrulesrc"
+if [ "$user_mode" = 1 ]; then
+    kwinrules_dst="${XDG_CONFIG_HOME:-$HOME/.config}/kwinrulesrc"
+else
+    kwinrules_dst="/etc/xdg/kwinrulesrc"
+fi
+if [ -f "$kwinrules_dst" ]; then
+    cp -a "$kwinrules_dst" "$kwinrules_dst.bak.steam-vkb" 2>/dev/null || true
+fi
+install -D -m 644 "$kwinrules_src" "$kwinrules_dst"
+echo "==> installed kwinrules -> $kwinrules_dst"
+
 # Rebuild the desktop entry cache so the Virtual Keyboard KCM sees the new
 # option immediately (kbuildsycoca6 falls back to kbuildsycoca5 automatically).
 for sy in kbuildsycoca6 kbuildsycoca5; do

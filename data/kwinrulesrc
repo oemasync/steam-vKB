@@ -1,0 +1,19 @@
+[General]
+count=1
+rules=1
+
+[1]
+Description=Window settings for Steam Keyboard
+above=true
+aboverule=2
+acceptfocus=false
+acceptfocusrule=2
+skiptaskbar=true
+skiptaskbarrule=2
+title=Keyboard
+titlematch=2
+types=256
+typerule=2
+wmclass=steamwebhelper steam
+wmclasscomplete=true
+wmclassmatch=2

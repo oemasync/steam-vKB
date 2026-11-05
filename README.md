@@ -137,3 +137,10 @@ Tuning (environment variables the launcher passes through, all optional):
 * ``steam://open/keyboard``: SDL wiki / gamescope overlay usage.
 * The Bazzite ``steamdeck-kde-presets`` KWin rules patch for the "Steam
   Keyboard" window shape.
+
+## Top bar (ESC, CTRL, ALT, F1-F9)
+
+The Steam Game Mode keyboard does not expose ESC/CTRL/ALT/F1-F9, so steam-vKB
+ships a small companion toolbar that appears above the keyboard on summon and
+injects those keys into the focused application via xdotool.  It is torn down
+again on dismiss.
