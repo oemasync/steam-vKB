@@ -195,7 +195,19 @@ class SteamVkbBridge:
         except Exception:  # noqa: BLE001
             pass
         now = time.monotonic()
-        if self._state.open_now(now):
+        should_show = self._state.open_now(now)
+        # Even if debounce swallows the state transition, still try to show
+        # the window if it is currently hidden — this recovers from a stuck
+        # "open" flag or a missed deactivate.
+        if not should_show and self._window is not None:
+            try:
+                # Check if window is currently visible; if not, force-show.
+                if hasattr(self._window, "get_visible") and not self._window.get_visible():  # type: ignore[union-attr]
+                    self._log("window hidden but state open; forcing show")
+                    should_show = True
+            except Exception:  # noqa: BLE001
+                pass
+        if should_show:
             if self._summoner is not None:
                 try:
                     self._summoner(self._config.open_cmd if self._config.open_cmd else None)
@@ -205,6 +217,16 @@ class SteamVkbBridge:
                 try:
                     self._window.show_all()
                     self._window.present()
+                    # Extra raise for XWayland/KWin
+                    try:
+                        self._window.set_keep_above(True)  # type: ignore[union-attr]
+                    except Exception:  # noqa: BLE001
+                        pass
+                    try:
+                        self._window.raise_()  # type: ignore[union-attr]
+                    except Exception:  # noqa: BLE001
+                        pass
+                    self._log("window shown and raised")
                 except Exception as exc:  # noqa: BLE001
                     self._log(f"show failed: {exc!r}")
         else:
