@@ -20,9 +20,12 @@ down itself on disable; on crash-exit it restarts the desktop-file command).
 
 from __future__ import annotations
 
+import faulthandler
 import os
+import signal
 import sys
 import time
+import traceback
 
 from pywayland.client import Display
 from pywayland.protocol import input_method_unstable_v1 as im_v1
@@ -66,38 +69,45 @@ class SteamVkbBridge:
         self._display_factory = display_factory
         self._summoner = summoner if summoner is not None else summon
         self._state = _SummonState()
+        self._bound = False
+
+    # -- logging ------------------------------------------------------------
+    def _log(self, msg: str) -> None:
+        """Unbuffered lifecycle log to fd 2 (KWin forwards it to the journal)."""
+        try:
+            os.write(2, f"steam-vkb: {msg}\n".encode())
+        except OSError:
+            pass
 
     # -- event handlers -----------------------------------------------------
     def on_activate(self, proxy, context) -> None:  # noqa: ANN001, ARG002
+        self._log("activate event received")
         if self._state.open_now(time.monotonic()):
-            if self._config.debug:
-                print("steam-vkb: text input active, summoning Steam keyboard", file=sys.stderr)
-            if not self._summoner(self._config.open_cmd):
-                if self._config.debug:
-                    print("steam-vkb: summon command unavailable", file=sys.stderr)
+            self._log("transitioning closed->open; summoning")
+            try:
+                ok = self._summoner(self._config.open_cmd)
+            except Exception as exc:  # noqa: BLE001
+                self._log(f"summon raised: {exc!r}")
+                ok = False
+            if not ok:
+                self._log("summon command unavailable/failed")
+            else:
+                self._log("summon dispatched")
+        else:
+            self._log("activate ignored (debounce or already open)")
 
     def on_deactivate(self, proxy, context) -> None:  # noqa: ANN001, ARG002
         if self._state.open:
             self._state.close()
-            if self._config.debug:
-                print("steam-vkb: text input deactivated", file=sys.stderr)
+            self._log("deactivate: closed")
             if self._config.close_on_deactivate and self._config.close_cmd:
-                if self._config.debug:
-                    print("steam-vkb: trying dismiss command", file=sys.stderr)
-                summon(self._config.close_cmd)
+                self._log("trying dismiss command")
+                try:
+                    summon(self._config.close_cmd)
+                except Exception as exc:  # noqa: BLE001
+                    self._log(f"dismiss raised: {exc!r}")
 
     # -- wayland plumbing ---------------------------------------------------
-    def _log(self, msg: str, *, verbose: bool = False) -> None:
-        """Lifecycle logging written straight to fd 2 (unbuffered).
-
-        KWin forwards the child's stderr into the journal, so these appear as
-        kwin_wayland lines.  Kept unbuffered on purpose: a crash must not be
-        able to eat the last log line.
-        """
-        if verbose and not self._config.debug:
-            return
-        os.write(2, f"steam-vkb: {msg}\n".encode())
-
     def bind_global(self, registry, name: int, iface: str, version: int):
         """Registry global handler: bind zwp_input_method_v1 and wire events."""
         if iface != PROTOCOL_GLOBAL:
@@ -106,6 +116,7 @@ class SteamVkbBridge:
         keyboard = registry.bind(name, im_v1.ZwpInputMethodV1, min(version, 1))
         keyboard.dispatcher["activate"] = self.on_activate
         keyboard.dispatcher["deactivate"] = self.on_deactivate
+        self._bound = True
         self._log(f"{iface} bound, activate/deactivate wired")
         return keyboard
 
@@ -130,18 +141,41 @@ class SteamVkbBridge:
 
         registry = display.get_registry()
         registry.dispatcher["global"] = self.bind_global
+
+        # Enumerate globals and wait for the IM global to be bound.  We avoid
+        # wl_display_roundtrip() here: on pywayland 0.4.19 it raises a spurious
+        # "TypeError: an integer is required" from inside a cffi callback on
+        # this code path, which KWin would otherwise read as a crash.
+        deadline = time.monotonic() + 5.0
         try:
-            display.roundtrip()  # globals enumerated and zwp_input_method_v1 bound
-            self._log("roundtrip complete (globals enumerated, IM bound if present)")
-            while True:
+            while not self._bound and time.monotonic() < deadline:
                 if display.dispatch(block=True) <= 0:
-                    # 0 == KWin closed the input-method connection.
+                    self._log("connection closed while waiting for IM global")
+                    break
+            if self._bound:
+                self._log("IM global bound (roundtrip-equivalent complete)")
+            else:
+                self._log("WARNING: IM global not bound within timeout")
+        except Exception as exc:  # noqa: BLE001
+            self._log(f"FATAL: dispatch failed during bind wait: {exc!r}\n{traceback.format_exc()}")
+            try:
+                display.disconnect()
+            except Exception:  # noqa: BLE001
+                pass
+            return 0
+
+        # Main loop: dispatch events; activate/deactivate arrive here.
+        try:
+            while True:
+                try:
+                    rc = display.dispatch(block=True)
+                except Exception as exc:  # noqa: BLE001
+                    self._log(f"dispatch raised: {exc!r}")
+                    break
+                if rc <= 0:
                     self._log("input-method connection closed; exiting")
                     break
         except KeyboardInterrupt:
-            return 0
-        except Exception as exc:  # noqa: BLE001
-            self._log(f"FATAL: dispatch failed: {exc!r}")
             return 0
 
         try:
@@ -150,12 +184,26 @@ class SteamVkbBridge:
             pass
         return 0
 
+    def main(self) -> int:
+        return self.run()
+
 
 def main(argv: list[str] | None = None) -> int:
     del argv  # No CLI flags yet; configuration is environment-driven (see README).
+    faulthandler.enable()
     config = Config.from_env()
     bridge = SteamVkbBridge(config)
     bridge._log(f"main() entered, python={sys.version.split()[0]}, debug={config.debug}")
+
+    def _on_signal(signum, frame):  # noqa: ANN001
+        bridge._log(f"received signal {signum}; exiting")
+        os._exit(0)
+
+    for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        try:
+            signal.signal(sig, _on_signal)
+        except (OSError, ValueError):
+            pass
     rc = bridge.run()
     bridge._log(f"main() returning {rc}")
     return rc
