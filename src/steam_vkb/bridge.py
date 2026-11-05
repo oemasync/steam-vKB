@@ -18,7 +18,9 @@ import traceback
 # skip-taskbar) keys on the X11 WM_CLASS and applies to XWayland windows, matching
 # the original Bazzite Steam keyboard. The Wayland input-method connection is
 # handled separately via pywayland and is unaffected by this.
-os.environ.setdefault("GDK_BACKEND", "x11")
+# Use direct assignment (not setdefault) so KWin's GDK_BACKEND=wayland (if set)
+# cannot override our requirement for an X11 window.
+os.environ["GDK_BACKEND"] = "x11"
 
 try:
     import gi
@@ -105,6 +107,12 @@ if HAS_GTK:
             self._on_key = on_key
             try:
                 self.set_wmclass("steamwebhelper", "steam")
+            except Exception:  # noqa: BLE001
+                pass
+            # Also try setting via X11 properties directly (fallback for
+            # XWayland where set_wmclass may not propagate).
+            try:
+                self.set_name("steamwebhelper")
             except Exception:  # noqa: BLE001
                 pass
             self.set_decorated(False)
